@@ -1,15 +1,30 @@
-# ใช้ Image พื้นฐานของ Playwright ที่มีเบราว์เซอร์และทุกอย่างติดตั้งมาพร้อมแล้ว
-FROM mcr.microsoft.com/playwright/python:v1.44.0
+# Python base image
+FROM python:3.10-slim
 
-# กำหนดโฟลเดอร์ทำงานภายใน Container
-WORKDIR /app
+# ติดตั้ง dependencies พื้นฐาน
+RUN apt-get update && apt-get install -y \
+    curl \
+    unzip \
+    wget \
+    xvfb \
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
+    libxss1 \
+    libasound2 \
+    libdrm2 \
+    libgbm1 \
+    && rm -rf /var/lib/apt/lists/*
 
-# คัดลอกไฟล์ requirements.txt เข้าไปก่อน แล้วติดตั้งไลบรารี
+# ติดตั้ง Playwright
+RUN pip install --upgrade pip
 COPY requirements.txt .
 RUN pip install -r requirements.txt
+RUN playwright install --with-deps
 
-# คัดลอกโค้ดส่วนที่เหลือทั้งหมดเข้าไป
-COPY . .
+# Copy โค้ดเข้า container
+COPY . /app
+WORKDIR /app
 
-# คำสั่งสำหรับรันบอท
+# Run Bot
 CMD ["python", "app.py"]
