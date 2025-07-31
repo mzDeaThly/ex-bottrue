@@ -45,6 +45,35 @@ async def true(ctx, *args):
     except Exception as e:
         print(f"Error reached main handler: {e}")
 
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def clear(ctx, amount: int = 5):
+    """ลบข้อความในช่องตามจำนวนที่ระบุ (ค่าเริ่มต้น 5)"""
+    
+    # ตรวจสอบว่าใช้ในช่อง "สอบถาม" เท่านั้น
+    if ctx.channel.name != "สอบถาม":
+        await ctx.send("❌ คำสั่งนี้ใช้ได้เฉพาะในช่อง #สอบถาม เท่านั้น", delete_after=10)
+        # ลบข้อความคำสั่ง !clear ที่ผู้ใช้พิมพ์ผิดช่อง
+        await asyncio.sleep(1)
+        await ctx.message.delete()
+        return
+
+    # ลบข้อความ (จำนวนที่ต้องการ + ข้อความคำสั่ง !clear)
+    deleted = await ctx.channel.purge(limit=amount + 1)
+    await ctx.send(f"✅ ลบไป {len(deleted) - 1} ข้อความเรียบร้อยแล้ว", delete_after=5)
+
+@clear.error
+async def clear_error(ctx, error):
+    """จัดการ Error สำหรับคำสั่ง clear"""
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("🚫 คุณไม่มีสิทธิ์ในการลบข้อความ", delete_after=10)
+        await asyncio.sleep(1)
+        await ctx.message.delete()
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send("❌ โปรดระบุจำนวนเป็นตัวเลข เช่น `!clear 10`", delete_after=10)
+        await asyncio.sleep(1)
+        await ctx.message.delete()
+
 # ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันปรับปรุงการคลิกและดีบัก) ======
 async def search_user_info(ctx, fname, lname, phone):
     page = None
