@@ -5,7 +5,7 @@ import asyncio
 import os
 
 # ====== กำหนดค่าหลัก ======
-DISCORD_TOKEN = "MTQwMDQ3NjYxMTQwMDQzNzc3MA.GpesF7.-9Cfv2laUfnrKfEmQugCHgQtHx3ejdlGwJhqKQ"
+DISCORD_TOKEN = "MTQwMDQ3NjYxMTQwMDQzNzc3MA.GX8Ohz.TxQGO2Ot_F9ciALszFQlUxkPBT9E0tkSDOmmIM"
 DEALER_USERNAME = "10015773"
 DEALER_PASSWORD = "JAjaja477*"
 
