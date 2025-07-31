@@ -4,10 +4,10 @@ from playwright.async_api import async_playwright
 import asyncio
 import os
 
-# ====== กำหนดค่าหลัก ======
-DISCORD_TOKEN = "MTQwMDQ3NjYxMTQwMDQzNzc3MA.GX8Ohz.TxQGO2Ot_F9ciALszFQlUxkPBT9E0tkSDOmmIM"
-DEALER_USERNAME = "10015773"
-DEALER_PASSWORD = "JAjaja477*"
+# ====== กำหนดค่าหลัก (อ่านจาก Environment Variables) ======
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+DEALER_USERNAME = os.getenv("DEALER_USERNAME")
+DEALER_PASSWORD = os.getenv("DEALER_PASSWORD")
 
 # ====== Discord Bot Setup ======
 intents = discord.Intents.default()
