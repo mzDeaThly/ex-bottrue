@@ -46,7 +46,7 @@ async def true(ctx, *args):
         print(f"Error reached main handler: {e}")
 
 
-# ====== ค้นหาข้อมูลลูกค้า ======
+# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันสุดท้าย) ======
 async def search_user_info(ctx, fname, lname, phone):
     page = None
     browser = None
@@ -69,31 +69,22 @@ async def search_user_info(ctx, fname, lname, phone):
             await ctx.send("`[5.5/8]` กำลังไปที่หน้าค้นหา...")
             await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
             
-            # --- [FIX] จัดการ Pop-up ที่อาจจะปรากฏขึ้นมา ---
-            await ctx.send("`[6/8]` อยู่ที่หน้าค้นหาแล้ว, กำลังตรวจสอบ Pop-up (ถ้ามี)...")
-            try:
-                # พยายามหาปุ่ม OK แล้วคลิก โดยให้เวลารอสั้นๆ แค่ 5 วินาที
-                await page.locator('button:has-text("OK")').click(timeout=5000)
-                await ctx.send("`[+]` ปิด Pop-up สำเร็จ!")
-            except Exception as e:
-                # ถ้าไม่เจอ Pop-up ภายใน 5 วินาที ก็ไม่เป็นไร ให้ทำงานต่อได้เลย
-                await ctx.send("`[-]` ไม่พบ Pop-up, ดำเนินการต่อ...")
-                pass
+            # --- [FIX] รอและใช้ช่องค้นหาที่ถูกต้อง ---
+            await ctx.send("`[6/8]` อยู่ที่หน้าค้นหาแล้ว กำลังรอช่องค้นหา `#SearchInput`...")
+            search_box_selector = "#SearchInput"
+            await page.wait_for_selector(search_box_selector, timeout=60000)
+            
+            await ctx.send("`[7/8]` พบช่องค้นหาแล้ว! กำลังกรอกข้อมูล...")
 
-            # ตอนนี้ Pop-up ควรจะถูกจัดการแล้ว ให้เริ่มรอฟอร์มได้
-            await ctx.send("`[6.8/8]` กำลังรอฟอร์มค้นหา...")
-            await page.wait_for_selector('input[formcontrolname="firstName"], input[formcontrolname="mobileNumber"]', timeout=60000)
-            await ctx.send("`[7/8]` พบฟอร์มแล้ว! กำลังค้นหาข้อมูล...")
+            # รวมข้อมูลการค้นหาลงในช่องเดียว
+            search_value = phone if phone else f"{fname} {lname}"
+            await page.fill(search_box_selector, search_value)
 
-            if fname:
-                await page.fill('input[formcontrolname="firstName"]', fname)
-            if lname:
-                await page.fill('input[formcontrolname="lastName"]', lname)
-            if phone:
-                await page.fill('input[formcontrolname="mobileNumber"]', phone)
-            await page.click('button.search-btn')
-
-            await page.wait_for_url("**/LandingPage", timeout=15000)
+            # คลิกปุ่ม "ค้นหา"
+            await page.locator('button:has-text("ค้นหา")').click()
+            
+            # รอผลลัพธ์และดึงข้อมูล
+            await page.wait_for_url("**/LandingPage", timeout=30000)
             await page.goto("https://crmlite-dealer.truecorp.co.th/AssetProfilePage")
             
             billing_info = await page.inner_text("div.asset-info")
