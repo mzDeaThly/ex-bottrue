@@ -1,0 +1,7 @@
+services:
+  - type: worker
+    name: discord-bot-true
+    env: python
+    buildCommand: pip install -r requirements.txt && playwright install
+    startCommand: python app.py
+    pythonVersion: 3.10
