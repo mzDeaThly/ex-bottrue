@@ -77,6 +77,9 @@ async def search_user_info(fname, lname, phone):
 
         # STEP 2: Smart Search
         await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage")
+        print("--- DEBUG: Page Content ---")
+        print(await page.content())
+        print("--- END DEBUG ---")
         if fname:
             await page.fill('input[formcontrolname="firstName"]', fname)
         if lname:
