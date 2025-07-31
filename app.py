@@ -63,63 +63,50 @@ async def true(ctx, *args):
         await ctx.send(f"❌ เกิดข้อผิดพลาด: {str(e)}")
 
 # ====== ค้นหาข้อมูลลูกค้า ======
-# ====== ค้นหาข้อมูลลูกค้า ======
 async def search_user_info(fname, lname, phone):
-    print("--- search_user_info function started. ---")
     async with async_playwright() as p:
-        print("Playwright context started.")
         browser = await p.chromium.launch(headless=True)
-        print("Browser launched.")
         context = await browser.new_context()
         page = await context.new_page()
-        print("New page created.")
 
         # STEP 1: Login
-        print("Navigating to login page...")
         await page.goto("https://wzzo.truecorp.co.th/auth/realms/Dealer-Internet/protocol/openid-connect/auth?client_id=crmlite-prod-dealer&response_type=code&scope=openid%20profile&redirect_uri=https://crmlite-dealer.truecorp.co.th/&state=xyz&nonce=abc&response_mode=query&code_challenge_method=S256&code_challenge=AzRSFK3CdlHMiDq1DsuRGEY-p6EzTxexaIRyLphE9o4")
-        print("Login page loaded. Filling credentials...")
         await page.fill('input[name="username"]', DEALER_USERNAME)
         await page.fill('input[name="password"]', DEALER_PASSWORD)
-        print("Credentials filled. Clicking login...")
         await page.click('input[type="submit"]')
-        print("Login clicked.")
 
         # STEP 2: Smart Search
-        print("Navigating to SmartSearchPage...")
         await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage")
-        print("SmartSearchPage loaded.")
-
-        print("--- DEBUG: Page Content ---")
-        print(await page.content())
-        print("--- END DEBUG ---")
         
-        print("Attempting to fill form...")
+        # --- FIX: รอให้หน้าเว็บโหลดช่องค้นหาให้เสร็จก่อน ---
+        print("Waiting for search form to become available...")
+        # เราจะรอช่องค้นหาชื่อ หรือ เบอร์โทร (อันใดอันหนึ่ง) ให้ปรากฏขึ้นมาก่อน
+        await page.wait_for_selector('input[formcontrolname="firstName"], input[formcontrolname="mobileNumber"]', timeout=60000) # รอสูงสุด 60 วินาที
+        print("Search form is available. Proceeding to fill.")
+
         if fname:
             await page.fill('input[formcontrolname="firstName"]', fname)
         if lname:
             await page.fill('input[formcontrolname="lastName"]', lname)
         if phone:
             await page.fill('input[formcontrolname="mobileNumber"]', phone)
-        print("Form fill attempted. Clicking search button...")
         await page.click('button.search-btn')
-        print("Search button clicked.")
 
+        # รอให้ไปที่หน้าผลลัพธ์
         await page.wait_for_url("**/LandingPage", timeout=15000)
 
         # STEP 3: Asset Profile
-        print("Navigating to AssetProfilePage...")
         await page.goto("https://crmlite-dealer.truecorp.co.th/AssetProfilePage")
         billing_info = ""
         try:
+            # รอให้ข้อมูลโปรไฟล์ปรากฏ
             await page.wait_for_selector("div.asset-info", timeout=10000)
             billing_info = await page.inner_text("div.asset-info")
-            print("Asset info found.")
-        except:
-            print("Asset info not found.")
-            billing_info = ""
+        except Exception as e:
+            print(f"Could not find asset info: {e}")
+            billing_info = "ไม่พบข้อมูลโปรไฟล์"
 
         await browser.close()
-        print("Browser closed. Returning billing_info.")
         return billing_info
         
 # ====== สร้าง Embed แสดงผล ======
