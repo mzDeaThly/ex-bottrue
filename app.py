@@ -3,6 +3,10 @@ from discord.ext import commands
 from playwright.async_api import async_playwright
 import asyncio
 import os
+from dotenv import load_dotenv
+
+# ====== โหลด ENV (.env) ======
+load_dotenv()
 
 # ====== กำหนดค่าหลัก (อ่านจาก Environment Variables) ======
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -100,17 +104,33 @@ async def search_user_info(ctx, fname, lname, phone):
 
 # ====== สร้าง Embed แสดงผล ======
 def create_embed_result(fname, lname, phone, billing_text):
-    # ... (ส่วนนี้เหมือนเดิม) ...
-    embed = discord.Embed(title="📄 ข้อมูลลูกค้า", description="ผลการค้นหา", color=0x00b0f4)
+    embed = discord.Embed(
+        title="📄 ข้อมูลลูกค้า",
+        description="ผลการค้นหา",
+        color=0x00b0f4
+    )
+
     if fname and lname:
         embed.add_field(name="ค้นหาด้วย", value=f"{fname} {lname}", inline=False)
     if phone:
         embed.add_field(name="เบอร์โทร", value=phone, inline=False)
-    if not billing_text.strip() or "ไม่พบข้อมูล" in billing_text:
+
+    if not billing_text.strip():
         embed.add_field(name="ผลลัพธ์", value="❌ ไม่พบข้อมูลในระบบ", inline=False)
-    else:
-        embed.add_field(name="ข้อมูลที่พบ", value=billing_text, inline=False)
+        return embed
+
+    lines = billing_text.split("\n")
+    for line in lines:
+        if "เลขประจำตัว" in line:
+            embed.add_field(name="เลขประจำตัว", value=line.strip(), inline=False)
+        elif "ที่อยู่" in line:
+            embed.add_field(name="ที่อยู่", value=line.strip(), inline=False)
+
     return embed
 
 # ====== เริ่มทำงาน ======
-bot.run(DISCORD_TOKEN)
+if not DISCORD_TOKEN:
+    print("❌ ไม่พบ DISCORD_TOKEN")
+else:
+    print("📡 กำลังเริ่มบอท...")
+    bot.run(DISCORD_TOKEN)
