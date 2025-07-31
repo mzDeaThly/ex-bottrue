@@ -46,7 +46,7 @@ async def true(ctx, *args):
         print(f"Error reached main handler: {e}")
 
 
-# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันตัด wait_for_load_state) ======
+# ====== ค้นหาข้อมูลลูกค้า ======
 async def search_user_info(ctx, fname, lname, phone):
     page = None
     browser = None
@@ -65,15 +65,23 @@ async def search_user_info(ctx, fname, lname, phone):
             await page.click('input[type="submit"]')
             await ctx.send("`[5/8]` ล็อกอินสำเร็จ!")
 
-            # --- [การแก้ไข] ---
-            # ลบ await page.wait_for_load_state('networkidle') ออกไป
-            # แล้วไปที่หน้าค้นหาโดยตรง
-            
             # STEP 2: Smart Search
             await ctx.send("`[5.5/8]` กำลังไปที่หน้าค้นหา...")
             await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
-            await ctx.send("`[6/8]` อยู่ที่หน้าค้นหาแล้ว กำลังรอฟอร์ม...")
             
+            # --- [FIX] จัดการ Pop-up ที่อาจจะปรากฏขึ้นมา ---
+            await ctx.send("`[6/8]` อยู่ที่หน้าค้นหาแล้ว, กำลังตรวจสอบ Pop-up (ถ้ามี)...")
+            try:
+                # พยายามหาปุ่ม OK แล้วคลิก โดยให้เวลารอสั้นๆ แค่ 5 วินาที
+                await page.locator('button:has-text("OK")').click(timeout=5000)
+                await ctx.send("`[+]` ปิด Pop-up สำเร็จ!")
+            except Exception as e:
+                # ถ้าไม่เจอ Pop-up ภายใน 5 วินาที ก็ไม่เป็นไร ให้ทำงานต่อได้เลย
+                await ctx.send("`[-]` ไม่พบ Pop-up, ดำเนินการต่อ...")
+                pass
+
+            # ตอนนี้ Pop-up ควรจะถูกจัดการแล้ว ให้เริ่มรอฟอร์มได้
+            await ctx.send("`[6.8/8]` กำลังรอฟอร์มค้นหา...")
             await page.wait_for_selector('input[formcontrolname="firstName"], input[formcontrolname="mobileNumber"]', timeout=60000)
             await ctx.send("`[7/8]` พบฟอร์มแล้ว! กำลังค้นหาข้อมูล...")
 
