@@ -45,8 +45,7 @@ async def true(ctx, *args):
     except Exception as e:
         print(f"Error reached main handler: {e}")
 
-
-# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันสุดท้าย) ======
+# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันรวมการแก้ไขทั้งหมด) ======
 async def search_user_info(ctx, fname, lname, phone):
     page = None
     browser = None
@@ -69,21 +68,28 @@ async def search_user_info(ctx, fname, lname, phone):
             await ctx.send("`[5.5/8]` กำลังไปที่หน้าค้นหา...")
             await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
             
-            # --- [FIX] รอและใช้ช่องค้นหาที่ถูกต้อง ---
-            await ctx.send("`[6/8]` อยู่ที่หน้าค้นหาแล้ว กำลังรอช่องค้นหา `#SearchInput`...")
+            # --- [FIX 1] จัดการ Pop-up ที่อาจจะปรากฏขึ้นมา (นำกลับมาแล้ว) ---
+            await ctx.send("`[6/8]` อยู่ที่หน้าค้นหาแล้ว, กำลังตรวจสอบ Pop-up (ถ้ามี)...")
+            try:
+                # พยายามหาปุ่ม OK แล้วคลิก โดยให้เวลารอสั้นๆ แค่ 5 วินาที
+                await page.locator('button:has-text("OK")').click(timeout=5000)
+                await ctx.send("`[+]` ปิด Pop-up สำเร็จ!")
+            except Exception as e:
+                # ถ้าไม่เจอ Pop-up ภายใน 5 วินาที ก็ไม่เป็นไร ให้ทำงานต่อได้เลย
+                await ctx.send("`[-]` ไม่พบ Pop-up, ดำเนินการต่อ...")
+                pass
+
+            # --- [FIX 2] รอและใช้ช่องค้นหาที่ถูกต้อง ---
+            await ctx.send("`[6.8/8]` กำลังรอช่องค้นหา `#SearchInput`...")
             search_box_selector = "#SearchInput"
             await page.wait_for_selector(search_box_selector, timeout=60000)
             
             await ctx.send("`[7/8]` พบช่องค้นหาแล้ว! กำลังกรอกข้อมูล...")
-
-            # รวมข้อมูลการค้นหาลงในช่องเดียว
             search_value = phone if phone else f"{fname} {lname}"
             await page.fill(search_box_selector, search_value)
 
-            # คลิกปุ่ม "ค้นหา"
             await page.locator('button:has-text("ค้นหา")').click()
             
-            # รอผลลัพธ์และดึงข้อมูล
             await page.wait_for_url("**/LandingPage", timeout=30000)
             await page.goto("https://crmlite-dealer.truecorp.co.th/AssetProfilePage")
             
