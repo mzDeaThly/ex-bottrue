@@ -20,18 +20,19 @@ async def on_ready():
     print(f"✅ บอทออนไลน์แล้ว: {bot.user.name}")
 
 @bot.command()
-async def true(ctx, *args):
-    allowed_channel_names = ["สอบถาม"]  # <- ชื่อห้องที่อนุญาตให้ใช้คำสั่ง
+async def true(ctx, *args): # <--- เปลี่ยนชื่อคำสั่งเป็น true
+    print("\n--- [LOG] ได้รับคำสั่ง !true ---")
+    allowed_channel_names = ["สอบถาม"]
 
     if ctx.channel.name not in allowed_channel_names:
+        print(f"[LOG] ใช้คำสั่งในช่องที่ผิด: {ctx.channel.name}")
         await ctx.send("❌ ไม่สามารถใช้คำสั่งได้\nคำสั่งนี้สามารถใช้ได้เฉพาะในห้องที่กำหนดเท่านั้น")
         return
 
     await ctx.send("🔍 กำลังค้นหาข้อมูล กรุณารอสักครู่...")
-
     embed_loading = discord.Embed(
         title="🔄 กำลังประมวลผล",
-        description="1. ✓ รับคำสั่งค้นหา\n2. » กำลังเรียกข้อมูลจาก API...\n3. รอการตอบกลับ...",
+        description="1. ✓ รับคำสั่งค้นหา\n2. » กำลังเรียกข้อมูล...\n3. รอการตอบกลับ...",
         color=0xf1c40f
     )
     await ctx.send(embed=embed_loading)
@@ -40,14 +41,19 @@ async def true(ctx, *args):
         if len(args) == 1:
             phone = args[0]
             fname, lname = "", ""
+            print(f"[LOG] ค้นหาด้วยเบอร์โทร: {phone}")
         elif len(args) == 2:
             fname, lname = args
             phone = ""
+            print(f"[LOG] ค้นหาด้วยชื่อ: {fname} {lname}")
         else:
+            print("[LOG] รูปแบบคำสั่งไม่ถูกต้อง")
             await ctx.send("❌ รูปแบบคำสั่งไม่ถูกต้อง\nพิมพ์แค่: `!true <เบอร์โทร>` หรือ `!true <ชื่อ> <นามสกุล>`")
             return
 
         result = await search_user_info(fname, lname, phone)
+        
+        print("[LOG] ค้นหาเสร็จสิ้น กำลังสร้างผลลัพธ์")
         embed = create_embed_result(fname, lname, phone, result)
 
         embed_done = discord.Embed(
@@ -58,81 +64,91 @@ async def true(ctx, *args):
         await ctx.send(embed=embed_done)
 
         await ctx.author.send(embed=embed)
+        print("[LOG] ส่งผลลัพธ์ไปที่ DM ของผู้ใช้แล้ว")
 
     except Exception as e:
-        await ctx.send(f"❌ เกิดข้อผิดพลาด: {str(e)}")
+        print(f"--- [ERROR] เกิดข้อผิดพลาดในคำสั่งหลัก: {e} ---")
+        await ctx.send(f"❌ เกิดข้อผิดพลาดที่ไม่คาดคิด: `{e}`")
 
-# ====== ค้นหาข้อมูลลูกค้า ======
+
+# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชัน Log ภาษาไทย) ======
 async def search_user_info(fname, lname, phone):
+    print("[LOG] เริ่มการทำงานฟังก์ชัน search_user_info")
     async with async_playwright() as p:
+        print("[LOG] เริ่มการทำงาน Playwright")
         browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context()
-        page = await context.new_page()
+        print("[LOG] เปิดเบราว์เซอร์แล้ว")
+        page = await browser.new_page()
+        print("[LOG] สร้างหน้าเว็บใหม่แล้ว")
 
-        # STEP 1: Login
-        await page.goto("https://wzzo.truecorp.co.th/auth/realms/Dealer-Internet/protocol/openid-connect/auth?client_id=crmlite-prod-dealer&response_type=code&scope=openid%20profile&redirect_uri=https://crmlite-dealer.truecorp.co.th/&state=xyz&nonce=abc&response_mode=query&code_challenge_method=S256&code_challenge=AzRSFK3CdlHMiDq1DsuRGEY-p6EzTxexaIRyLphE9o4")
-        await page.fill('input[name="username"]', DEALER_USERNAME)
-        await page.fill('input[name="password"]', DEALER_PASSWORD)
-        await page.click('input[type="submit"]')
-
-        # STEP 2: Smart Search
-        await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage")
-        
-        # --- FIX: รอให้หน้าเว็บโหลดช่องค้นหาให้เสร็จก่อน ---
-        print("Waiting for search form to become available...")
-        # เราจะรอช่องค้นหาชื่อ หรือ เบอร์โทร (อันใดอันหนึ่ง) ให้ปรากฏขึ้นมาก่อน
-        await page.wait_for_selector('input[formcontrolname="firstName"], input[formcontrolname="mobileNumber"]', timeout=60000) # รอสูงสุด 60 วินาที
-        print("Search form is available. Proceeding to fill.")
-
-        if fname:
-            await page.fill('input[formcontrolname="firstName"]', fname)
-        if lname:
-            await page.fill('input[formcontrolname="lastName"]', lname)
-        if phone:
-            await page.fill('input[formcontrolname="mobileNumber"]', phone)
-        await page.click('button.search-btn')
-
-        # รอให้ไปที่หน้าผลลัพธ์
-        await page.wait_for_url("**/LandingPage", timeout=15000)
-
-        # STEP 3: Asset Profile
-        await page.goto("https://crmlite-dealer.truecorp.co.th/AssetProfilePage")
-        billing_info = ""
         try:
-            # รอให้ข้อมูลโปรไฟล์ปรากฏ
-            await page.wait_for_selector("div.asset-info", timeout=10000)
-            billing_info = await page.inner_text("div.asset-info")
-        except Exception as e:
-            print(f"Could not find asset info: {e}")
-            billing_info = "ไม่พบข้อมูลโปรไฟล์"
+            # STEP 1: Login
+            print("[LOG] ขั้นตอนที่ 1: กำลังไปที่หน้าล็อกอิน...")
+            await page.goto("https://wzzo.truecorp.co.th/auth/realms/Dealer-Internet/protocol/openid-connect/auth?client_id=crmlite-prod-dealer&response_type=code&scope=openid%20profile&redirect_uri=https://crmlite-dealer.truecorp.co.th/&state=xyz&nonce=abc&response_mode=query&code_challenge_method=S256&code_challenge=AzRSFK3CdlHMiDq1DsuRGEY-p6EzTxexaIRyLphE9o4", timeout=60000)
+            print("[LOG] โหลดหน้าล็อกอินแล้ว กำลังกรอกข้อมูล...")
+            await page.fill('input[name="username"]', DEALER_USERNAME)
+            await page.fill('input[name="password"]', DEALER_PASSWORD)
+            print("[LOG] กรอกข้อมูลแล้ว กำลังคลิกปุ่มล็อกอิน...")
+            await page.click('input[type="submit"]')
+            print("[LOG] คลิกปุ่มล็อกอินแล้ว")
 
-        await browser.close()
-        return billing_info
-        
+            # STEP 2: Smart Search
+            print("[LOG] ขั้นตอนที่ 2: กำลังไปที่หน้า SmartSearchPage...")
+            await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
+            print("[LOG] โหลดหน้า SmartSearchPage แล้ว กำลังรอให้ฟอร์มค้นหาปรากฏ...")
+            
+            await page.wait_for_selector('input[formcontrolname="firstName"], input[formcontrolname="mobileNumber"]', timeout=60000)
+            print("[LOG] ฟอร์มค้นหาปรากฏแล้ว กำลังกรอกข้อมูล...")
+
+            if fname:
+                await page.fill('input[formcontrolname="firstName"]', fname)
+            if lname:
+                await page.fill('input[formcontrolname="lastName"]', lname)
+            if phone:
+                await page.fill('input[formcontrolname="mobileNumber"]', phone)
+            await page.click('button.search-btn')
+            print("[LOG] คลิกปุ่มค้นหาแล้ว กำลังรอหน้าผลลัพธ์...")
+
+            await page.wait_for_url("**/LandingPage", timeout=15000)
+            print("[LOG] โหลดหน้า LandingPage แล้ว")
+
+            # STEP 3: Asset Profile
+            print("[LOG] ขั้นตอนที่ 3: กำลังไปที่หน้า AssetProfilePage...")
+            await page.goto("https://crmlite-dealer.truecorp.co.th/AssetProfilePage")
+            billing_info = ""
+            try:
+                print("[LOG] กำลังรอให้ข้อมูลโปรไฟล์ปรากฏ...")
+                await page.wait_for_selector("div.asset-info", timeout=10000)
+                billing_info = await page.inner_text("div.asset-info")
+                print("[LOG] พบข้อมูลโปรไฟล์แล้ว")
+            except Exception as e:
+                print(f"[LOG] ไม่พบข้อมูลโปรไฟล์: {e}")
+                billing_info = "ไม่พบข้อมูลโปรไฟล์"
+
+            await browser.close()
+            print("[LOG] ปิดเบราว์เซอร์แล้ว กำลังส่งข้อมูลกลับ")
+            return billing_info
+
+        except Exception as e:
+            print(f"--- [ERROR] เกิดข้อผิดพลาดภายในฟังก์ชัน search_user_info: {e} ---")
+            await browser.close()
+            print("[LOG] ปิดเบราว์เซอร์เนื่องจากมีข้อผิดพลาด")
+            raise e
+
+
 # ====== สร้าง Embed แสดงผล ======
 def create_embed_result(fname, lname, phone, billing_text):
-    embed = discord.Embed(
-        title="📄 ข้อมูลลูกค้า",
-        description="ผลการค้นหา",
-        color=0x00b0f4
-    )
-
+    embed = discord.Embed(title="📄 ข้อมูลลูกค้า", description="ผลการค้นหา", color=0x00b0f4)
     if fname and lname:
         embed.add_field(name="ค้นหาด้วย", value=f"{fname} {lname}", inline=False)
     if phone:
         embed.add_field(name="เบอร์โทร", value=phone, inline=False)
 
-    if not billing_text.strip():
+    if not billing_text.strip() or "ไม่พบข้อมูล" in billing_text:
         embed.add_field(name="ผลลัพธ์", value="❌ ไม่พบข้อมูลในระบบ", inline=False)
-        return embed
-
-    lines = billing_text.split("\n")
-    for line in lines:
-        if "เลขประจำตัว" in line:
-            embed.add_field(name="เลขประจำตัว", value=line.strip(), inline=False)
-        elif "ที่อยู่" in line:
-            embed.add_field(name="ที่อยู่", value=line.strip(), inline=False)
-
+    else:
+        embed.add_field(name="ข้อมูลที่พบ", value=billing_text, inline=False)
+        
     return embed
 
 # ====== เริ่มทำงาน ======
