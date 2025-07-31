@@ -45,7 +45,7 @@ async def true(ctx, *args):
     except Exception as e:
         print(f"Error reached main handler: {e}")
 
-# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันรวมการแก้ไขทั้งหมด) ======
+# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันปรับปรุงการคลิกและดีบัก) ======
 async def search_user_info(ctx, fname, lname, phone):
     page = None
     browser = None
@@ -68,18 +68,16 @@ async def search_user_info(ctx, fname, lname, phone):
             await ctx.send("`[5.5/8]` กำลังไปที่หน้าค้นหา...")
             await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
             
-            # --- [FIX 1] จัดการ Pop-up ที่อาจจะปรากฏขึ้นมา (นำกลับมาแล้ว) ---
-            await ctx.send("`[6/8]` อยู่ที่หน้าค้นหาแล้ว, กำลังตรวจสอบ Pop-up (ถ้ามี)...")
+            # จัดการ Pop-up
+            await ctx.send("`[6/8]` อยู่ที่หน้าค้นหาแล้ว, กำลังตรวจสอบ Pop-up...")
             try:
-                # พยายามหาปุ่ม OK แล้วคลิก โดยให้เวลารอสั้นๆ แค่ 5 วินาที
                 await page.locator('button:has-text("OK")').click(timeout=5000)
                 await ctx.send("`[+]` ปิด Pop-up สำเร็จ!")
             except Exception as e:
-                # ถ้าไม่เจอ Pop-up ภายใน 5 วินาที ก็ไม่เป็นไร ให้ทำงานต่อได้เลย
                 await ctx.send("`[-]` ไม่พบ Pop-up, ดำเนินการต่อ...")
                 pass
 
-            # --- [FIX 2] รอและใช้ช่องค้นหาที่ถูกต้อง ---
+            # รอและกรอกข้อมูลในช่องค้นหา
             await ctx.send("`[6.8/8]` กำลังรอช่องค้นหา `#SearchInput`...")
             search_box_selector = "#SearchInput"
             await page.wait_for_selector(search_box_selector, timeout=60000)
@@ -88,8 +86,15 @@ async def search_user_info(ctx, fname, lname, phone):
             search_value = phone if phone else f"{fname} {lname}"
             await page.fill(search_box_selector, search_value)
 
-            await page.locator('button:has-text("ค้นหา")').click()
+            # --- [การแก้ไข] ---
+            # คลิกปุ่ม "ค้นหา" และถ่ายภาพหน้าจอทันทีเพื่อดูผลลัพธ์
+            search_button = page.locator('button:has-text("ค้นหา")')
+            await search_button.click()
+            await ctx.send("`[7.5/8]` คลิกปุ่มค้นหาแล้ว! กำลังถ่ายภาพหน้าจอหลังคลิก...")
+            await page.screenshot(path="post_search_click.png", full_page=True)
+            await ctx.send(file=discord.File("post_search_click.png"))
             
+            # รอผลลัพธ์และดึงข้อมูล
             await page.wait_for_url("**/LandingPage", timeout=30000)
             await page.goto("https://crmlite-dealer.truecorp.co.th/AssetProfilePage")
             
