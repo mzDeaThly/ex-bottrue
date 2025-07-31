@@ -25,9 +25,7 @@ async def on_ready():
 
 @bot.command()
 async def true(ctx, *args):
-    # ไม่มีการตรวจสอบช่อง เพื่อให้แน่ใจว่าคำสั่งทำงาน
     await ctx.send("`[1/8]` ได้รับคำสั่ง! กำลังเริ่มต้น...")
-    
     try:
         if len(args) == 1:
             phone = args[0]
@@ -39,19 +37,16 @@ async def true(ctx, *args):
             await ctx.send("❌ รูปแบบคำสั่งไม่ถูกต้อง\nพิมพ์แค่: `!true <เบอร์โทร>` หรือ `!true <ชื่อ> <นามสกุล>`")
             return
 
-        # ส่ง ctx เข้าไปในฟังก์ชันเพื่อใช้ในการส่ง Log
         result = await search_user_info(ctx, fname, lname, phone)
-        
         embed = create_embed_result(fname, lname, phone, result)
         await ctx.author.send(embed=embed)
         await ctx.send("`[8/8]` ✅ ส่งข้อมูลไปที่ DM เรียบร้อย!")
 
     except Exception as e:
-        # การดักจับ error จะเกิดขึ้นใน search_user_info เป็นหลัก
         print(f"Error reached main handler: {e}")
 
 
-# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชัน Live Debugging) ======
+# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันแก้ไข) ======
 async def search_user_info(ctx, fname, lname, phone):
     page = None
     browser = None
@@ -68,9 +63,12 @@ async def search_user_info(ctx, fname, lname, phone):
             await page.fill('input[name="username"]', DEALER_USERNAME)
             await page.fill('input[name="password"]', DEALER_PASSWORD)
             await page.click('input[type="submit"]')
-            await ctx.send("`[5/8]` ล็อกอินสำเร็จ! กำลังไปที่หน้าค้นหา...")
+
+            await ctx.send("`[5/8]` ล็อกอินสำเร็จ! กำลังรอให้หน้าเว็บนิ่ง...")
+            await page.wait_for_load_state('networkidle', timeout=60000)
 
             # STEP 2: Smart Search
+            await ctx.send("`[5.5/8]` กำลังไปที่หน้าค้นหา...")
             await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
             await ctx.send("`[6/8]` อยู่ที่หน้าค้นหาแล้ว กำลังรอฟอร์ม...")
             
@@ -102,29 +100,31 @@ async def search_user_info(ctx, fname, lname, phone):
             await browser.close()
         raise e
 
-# ====== สร้าง Embed แสดงผล ======
+# ====== สร้าง Embed แสดงผล (เวอร์ชันแก้ไข) ======
 def create_embed_result(fname, lname, phone, billing_text):
-    embed = discord.Embed(
-        title="📄 ข้อมูลลูกค้า",
-        description="ผลการค้นหา",
-        color=0x00b0f4
-    )
+    embed = discord.Embed(title="📄 ข้อมูลลูกค้า", description="ผลการค้นหา", color=0x00b0f4)
 
     if fname and lname:
         embed.add_field(name="ค้นหาด้วย", value=f"{fname} {lname}", inline=False)
     if phone:
         embed.add_field(name="เบอร์โทร", value=phone, inline=False)
 
-    if not billing_text.strip():
+    if not billing_text or not billing_text.strip():
         embed.add_field(name="ผลลัพธ์", value="❌ ไม่พบข้อมูลในระบบ", inline=False)
         return embed
 
+    found_specific_fields = False
     lines = billing_text.split("\n")
     for line in lines:
         if "เลขประจำตัว" in line:
             embed.add_field(name="เลขประจำตัว", value=line.strip(), inline=False)
+            found_specific_fields = True
         elif "ที่อยู่" in line:
             embed.add_field(name="ที่อยู่", value=line.strip(), inline=False)
+            found_specific_fields = True
+            
+    if not found_specific_fields:
+        embed.add_field(name="ข้อมูลที่พบ", value=f"```\n{billing_text}\n```", inline=False)
 
     return embed
 
