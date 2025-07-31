@@ -46,7 +46,7 @@ async def true(ctx, *args):
         print(f"Error reached main handler: {e}")
 
 
-# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันแก้ไข) ======
+# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันตัด wait_for_load_state) ======
 async def search_user_info(ctx, fname, lname, phone):
     page = None
     browser = None
@@ -63,10 +63,12 @@ async def search_user_info(ctx, fname, lname, phone):
             await page.fill('input[name="username"]', DEALER_USERNAME)
             await page.fill('input[name="password"]', DEALER_PASSWORD)
             await page.click('input[type="submit"]')
+            await ctx.send("`[5/8]` ล็อกอินสำเร็จ!")
 
-            await ctx.send("`[5/8]` ล็อกอินสำเร็จ! กำลังรอให้หน้าเว็บนิ่ง...")
-            await page.wait_for_load_state('networkidle', timeout=60000)
-
+            # --- [การแก้ไข] ---
+            # ลบ await page.wait_for_load_state('networkidle') ออกไป
+            # แล้วไปที่หน้าค้นหาโดยตรง
+            
             # STEP 2: Smart Search
             await ctx.send("`[5.5/8]` กำลังไปที่หน้าค้นหา...")
             await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
