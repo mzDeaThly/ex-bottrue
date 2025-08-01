@@ -79,15 +79,14 @@ async def clear_error(ctx, error):
 
 # =========== สิ้นสุดคำสั่ง !Clear ==========!
 
-
-# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันอัปเดตตาม Requirement ใหม่) ======
+# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันแก้ไข TimeoutError) ======
 async def search_user_info(ctx, fname, lname, phone):
     p = None
     browser = None
     page = None
     try:
         p = await async_playwright().start()
-        browser = await p.chromium.launch(headless=True) # เปลี่ยนเป็น False เพื่อดูการทำงานของบอท
+        browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         
         # STEP 1: Login
@@ -96,7 +95,10 @@ async def search_user_info(ctx, fname, lname, phone):
         await page.fill('input[name="username"]', DEALER_USERNAME)
         await page.fill('input[name="password"]', DEALER_PASSWORD)
         await page.click('input[type="submit"]')
-        await page.wait_for_url("**/LandingPage**", timeout=60000)
+
+        # --- [แก้ไข] เปลี่ยนจากการรอ URL ที่เจาะจง เป็นการรอให้หน้าเว็บโหลดเสร็จ ---
+        await page.wait_for_load_state('domcontentloaded', timeout=30000)
+        await ctx.send("`[+]` เข้าสู่ระบบสำเร็จ!")
 
         # STEP 2: Smart Search
         await ctx.send("`[3/8]` กำลังไปยังหน้าค้นหา...")
@@ -116,33 +118,25 @@ async def search_user_info(ctx, fname, lname, phone):
         await page.fill(search_box_selector, search_value)
         await page.press(search_box_selector, 'Enter')
 
-        # ===== [ส่วนที่แก้ไขใหม่] =====
-        
         # STEP 4: รอและเลือกผู้ใช้งานที่ Active
         await ctx.send(f"`[5/8]` กำลังค้นหาผู้ใช้ '{search_value}' ที่สถานะ Active...")
-        # เราจะหา div ที่มีทั้งข้อความ "Active" และชื่อลูกค้าที่เราค้นหา แล้วคลิก
         user_selector = f'div:has-text("Active"):has-text("{search_value}")'
         await page.wait_for_selector(user_selector, timeout=20000)
         await page.locator(user_selector).first.click()
 
         # STEP 5: รอและเลือกบริการ TrueOnline ที่ Active
         await ctx.send("`[6/8]` พบผู้ใช้! กำลังเลือกบริการ TrueOnline...")
-        # หา div ที่มีทั้งคำว่า "TrueOnline" และ "Active" จากนั้นหาปุ่ม(svg) ที่อยู่ใน div นั้นแล้วคลิก
         service_selector = 'div:has-text("TrueOnline"):has-text("Active")'
         await page.wait_for_selector(service_selector, timeout=20000)
         await page.locator(service_selector).locator('svg.MuiSvgIcon-colorSecondary').first.click()
 
         # STEP 6: ดึงข้อมูล Billing จากหน้าสุดท้าย
         await ctx.send("`[7/8]` พบเซอร์วิส! กำลังดึงข้อมูล Billing...")
-        # รอให้ container ของ Billing โหลดเสร็จ โดยเช็คจากข้อความ "Billing Name:"
         billing_info_container_selector = 'div.MuiGrid-container:has(p:text("Billing Name:"))'
         await page.wait_for_selector(billing_info_container_selector, timeout=10000)
         
-        # ดึงข้อความทั้งหมดใน Container นั้น
         billing_container = page.locator(billing_info_container_selector).last
         billing_info = await billing_container.inner_text()
-        
-        # =============================
         
         return billing_info
 
@@ -157,7 +151,6 @@ async def search_user_info(ctx, fname, lname, phone):
         return None
 
     finally:
-        # บล็อกนี้จะทำงานเสมอ
         if browser:
             await browser.close()
         if p:
