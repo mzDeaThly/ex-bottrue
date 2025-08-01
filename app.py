@@ -80,61 +80,91 @@ async def clear_error(ctx, error):
 # =========== สิ้นสุดคำสั่ง !Clear ==========!
 
 
-# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันสุดท้าย) ======
+# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันอัปเดตตาม Requirement ใหม่) ======
 async def search_user_info(ctx, fname, lname, phone):
-    page = None
+    p = None
     browser = None
+    page = None
     try:
-        # async with async_playwright() as p: # Comment this line out if playwright is managed outside
-        p = await async_playwright().start() # Use this line if playwright is managed outside
-        browser = await p.chromium.launch(headless=True)
+        p = await async_playwright().start()
+        browser = await p.chromium.launch(headless=True) # เปลี่ยนเป็น False เพื่อดูการทำงานของบอท
         page = await browser.new_page()
-            
+        
         # STEP 1: Login
+        await ctx.send("`[2/8]` กำลังเข้าสู่ระบบ...")
         await page.goto("https://wzzo.truecorp.co.th/auth/realms/Dealer-Internet/protocol/openid-connect/auth?client_id=crmlite-prod-dealer&response_type=code&scope=openid%20profile&redirect_uri=https://crmlite-dealer.truecorp.co.th/&state=xyz&nonce=abc&response_mode=query&code_challenge_method=S256&code_challenge=AzRSFK3CdlHMiDq1DsuRGEY-p6EzTxexaIRyLphE9o4", timeout=60000)
         await page.fill('input[name="username"]', DEALER_USERNAME)
         await page.fill('input[name="password"]', DEALER_PASSWORD)
         await page.click('input[type="submit"]')
+        await page.wait_for_url("**/LandingPage**", timeout=60000)
 
         # STEP 2: Smart Search
+        await ctx.send("`[3/8]` กำลังไปยังหน้าค้นหา...")
         await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
-            
-        # จัดการ Pop-up (ถ้ามี)
+        
         try:
             await page.locator('button:has-text("OK")').click(timeout=5000)
         except Exception:
-            pass # ถ้าไม่เจอ Pop-up ก็ไม่เป็นไร
+            pass 
 
-        # รอ, กรอกข้อมูล, และกด Enter
+        # STEP 3: กรอกข้อมูลและค้นหา
+        await ctx.send("`[4/8]` กำลังค้นหาข้อมูล...")
         search_box_selector = "#SearchInput"
         await page.wait_for_selector(search_box_selector, timeout=60000)
-            
+        
         search_value = phone if phone else f"{fname} {lname}"
         await page.fill(search_box_selector, search_value)
-        
-        # --- [การแก้ไข] ---
-        # กด Enter แทนการคลิกปุ่ม
         await page.press(search_box_selector, 'Enter')
+
+        # ===== [ส่วนที่แก้ไขใหม่] =====
         
-        # รอผลลัพธ์และดึงข้อมูล
-        await page.wait_for_url("**/LandingPage", timeout=30000)
-        await page.goto("https://crmlite-dealer.truecorp.co.th/AssetProfilePage")
-            
-        await page.wait_for_selector("div.asset-info", timeout=10000) # เพิ่มการรอข้อมูล
-        billing_info = await page.inner_text("div.asset-info")
-        await browser.close()
-        await p.stop() # Use this line if playwright is managed outside
+        # STEP 4: รอและเลือกผู้ใช้งานที่ Active
+        await ctx.send(f"`[5/8]` กำลังค้นหาผู้ใช้ '{search_value}' ที่สถานะ Active...")
+        # เราจะหา div ที่มีทั้งข้อความ "Active" และชื่อลูกค้าที่เราค้นหา แล้วคลิก
+        user_selector = f'div:has-text("Active"):has-text("{search_value}")'
+        await page.wait_for_selector(user_selector, timeout=20000)
+        await page.locator(user_selector).first.click()
+
+        # STEP 5: รอและเลือกบริการ TrueOnline ที่ Active
+        await ctx.send("`[6/8]` พบผู้ใช้! กำลังเลือกบริการ TrueOnline...")
+        # หา div ที่มีทั้งคำว่า "TrueOnline" และ "Active" จากนั้นหาปุ่ม(svg) ที่อยู่ใน div นั้นแล้วคลิก
+        service_selector = 'div:has-text("TrueOnline"):has-text("Active")'
+        await page.wait_for_selector(service_selector, timeout=20000)
+        await page.locator(service_selector).locator('svg.MuiSvgIcon-colorSecondary').first.click()
+
+        # STEP 6: ดึงข้อมูล Billing จากหน้าสุดท้าย
+        await ctx.send("`[7/8]` พบเซอร์วิส! กำลังดึงข้อมูล Billing...")
+        # รอให้ container ของ Billing โหลดเสร็จ โดยเช็คจากข้อความ "Billing Name:"
+        billing_info_container_selector = 'div.MuiGrid-container:has(p:text("Billing Name:"))'
+        await page.wait_for_selector(billing_info_container_selector, timeout=10000)
+        
+        # ดึงข้อความทั้งหมดใน Container นั้น
+        billing_container = page.locator(billing_info_container_selector).last
+        billing_info = await billing_container.inner_text()
+        
+        # =============================
+        
         return billing_info
 
     except Exception as e:
-        await ctx.send(f"‼️ **เกิดปัญหาขึ้น:**\n```\n{e}\n```")
+        error_message = f"‼️ **เกิดปัญหาขึ้นระหว่างการทำงาน:**\n```\n{type(e).__name__}: {e}\n```"
+        print(error_message) 
+        await ctx.send(error_message)
         if page:
-            await page.screenshot(path="final_error.png", full_page=True)
-            await ctx.send("ภาพหน้าจอของหน้าที่เกิดปัญหาล่าสุด:", file=discord.File("final_error.png"))
+            screenshot_path = "error_screenshot.png"
+            await page.screenshot(path=screenshot_path, full_page=True)
+            await ctx.send("ภาพหน้าจอของหน้าที่เกิดปัญหาล่าสุด:", file=discord.File(screenshot_path))
+        return None
+
+    finally:
+        # บล็อกนี้จะทำงานเสมอ
         if browser:
             await browser.close()
-        # await p.stop() # Use this line if playwright is managed outside
-        raise e
+        if p:
+            await p.stop()
+        print("Playwright browser and instance closed.")
+
+
 # ====== สร้าง Embed แสดงผล (เวอร์ชันแก้ไข) ======
 def create_embed_result(fname, lname, phone, billing_text):
     embed = discord.Embed(title="📄 ข้อมูลลูกค้า", description="ผลการค้นหา", color=0x00b0f4)
