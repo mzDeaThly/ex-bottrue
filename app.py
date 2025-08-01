@@ -25,7 +25,21 @@ async def on_ready():
 
 @bot.command()
 async def true(ctx, *args):
-    await ctx.send("`[1/8]` ได้รับคำสั่ง! กำลังเริ่มต้น...")
+    allowed_channel_names = ["สอบถาม"]  # <- ชื่อห้องที่อนุญาตให้ใช้คำสั่ง
+
+    if ctx.channel.name not in allowed_channel_names:
+        await ctx.send("❌ ไม่สามารถใช้คำสั่งได้\nคำสั่งนี้สามารถใช้ได้เฉพาะในห้องที่กำหนดเท่านั้น")
+        return
+
+    await ctx.send("🔍 กำลังค้นหาข้อมูล กรุณารอสักครู่...")
+
+    embed_loading = discord.Embed(
+        title="🔄 กำลังประมวลผล",
+        description="1. ✓ รับคำสั่งค้นหา\n2. » กำลังเรียกข้อมูลจาก API...\n3. รอการตอบกลับ...",
+        color=0xf1c40f
+    )
+    await ctx.send(embed=embed_loading)
+
     try:
         if len(args) == 1:
             phone = args[0]
@@ -37,13 +51,21 @@ async def true(ctx, *args):
             await ctx.send("❌ รูปแบบคำสั่งไม่ถูกต้อง\nพิมพ์แค่: `!true <เบอร์โทร>` หรือ `!true <ชื่อ> <นามสกุล>`")
             return
 
-        result = await search_user_info(ctx, fname, lname, phone)
+        result = await search_user_info(fname, lname, phone)
         embed = create_embed_result(fname, lname, phone, result)
+
+        embed_done = discord.Embed(
+            title="✅ ดำเนินการเสร็จสิ้น",
+            description="1. ✓ รับคำสั่งค้นหา\n2. ✓ ค้นหาข้อมูลสำเร็จ\n3. ✓ ส่งข้อมูลทาง DM แล้ว",
+            color=0x2ecc71
+        )
+        await ctx.send(embed=embed_done)
+
         await ctx.author.send(embed=embed)
-        await ctx.send("`[8/8]` ✅ ส่งข้อมูลไปที่ DM เรียบร้อย!")
 
     except Exception as e:
-        print(f"Error reached main handler: {e}")
+        await ctx.send(f"❌ เกิดข้อผิดพลาด: {str(e)}")
+
 
 @bot.command()
 @commands.has_permissions(manage_messages=True)
