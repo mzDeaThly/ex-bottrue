@@ -79,6 +79,7 @@ async def clear_error(ctx, error):
 
 # =========== สิ้นสุดคำสั่ง !Clear ==========!
 
+
 # ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันสุดท้าย) ======
 async def search_user_info(ctx, fname, lname, phone):
     page = None
@@ -134,7 +135,6 @@ async def search_user_info(ctx, fname, lname, phone):
             await browser.close()
         # await p.stop() # Use this line if playwright is managed outside
         raise e
-
 # ====== สร้าง Embed แสดงผล (เวอร์ชันแก้ไข) ======
 def create_embed_result(fname, lname, phone, billing_text):
     embed = discord.Embed(title="📄 ข้อมูลลูกค้า", description="ผลการค้นหา", color=0x00b0f4)
