@@ -79,7 +79,7 @@ async def clear_error(ctx, error):
 
 # =========== สิ้นสุดคำสั่ง !Clear ==========!
 
-# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันแก้ไข TimeoutError) ======
+# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันแก้ไขให้ยืดหยุ่นกับประเภทบริการ) ======
 async def search_user_info(ctx, fname, lname, phone):
     p = None
     browser = None
@@ -95,8 +95,6 @@ async def search_user_info(ctx, fname, lname, phone):
         await page.fill('input[name="username"]', DEALER_USERNAME)
         await page.fill('input[name="password"]', DEALER_PASSWORD)
         await page.click('input[type="submit"]')
-
-        # --- [แก้ไข] เปลี่ยนจากการรอ URL ที่เจาะจง เป็นการรอให้หน้าเว็บโหลดเสร็จ ---
         await page.wait_for_load_state('domcontentloaded', timeout=30000)
         await ctx.send("`[+]` เข้าสู่ระบบสำเร็จ!")
 
@@ -110,24 +108,29 @@ async def search_user_info(ctx, fname, lname, phone):
             pass 
 
         # STEP 3: กรอกข้อมูลและค้นหา
-        await ctx.send("`[4/8]` กำลังค้นหาข้อมูล...")
+        search_value = phone if phone else f"{fname} {lname}"
+        await ctx.send(f"`[4/8]` กำลังค้นหาข้อมูล '{search_value}'...")
         search_box_selector = "#SearchInput"
         await page.wait_for_selector(search_box_selector, timeout=60000)
         
-        search_value = phone if phone else f"{fname} {lname}"
         await page.fill(search_box_selector, search_value)
         await page.press(search_box_selector, 'Enter')
 
         # STEP 4: รอและเลือกผู้ใช้งานที่ Active
-        await ctx.send(f"`[5/8]` กำลังค้นหาผู้ใช้ '{search_value}' ที่สถานะ Active...")
-        user_selector = f'div:has-text("Active"):has-text("{search_value}")'
+        await ctx.send(f"`[5/8]` กำลังค้นหาผู้ใช้ '{search_value}'...")
+        # เราจะหา div ที่มีชื่อลูกค้าที่เราค้นหา แล้วคลิกที่ div นั้น
+        user_selector = f'div:has-text("{search_value}")'
         await page.wait_for_selector(user_selector, timeout=20000)
-        await page.locator(user_selector).first.click()
+        # คลิกที่ผลการค้นหา 'คุณลูกค้า'
+        await page.locator(user_selector).filter(has_text="คุณลูกค้า").first.click()
 
-        # STEP 5: รอและเลือกบริการ TrueOnline ที่ Active
-        await ctx.send("`[6/8]` พบผู้ใช้! กำลังเลือกบริการ TrueOnline...")
-        service_selector = 'div:has-text("TrueOnline"):has-text("Active")'
+
+        # STEP 5: รอและเลือกบริการที่ Active (ไม่ว่าจะเป็น TrueOnline หรือ TrueMove H)
+        await ctx.send("`[6/8]` พบผู้ใช้! กำลังเลือกบริการที่สถานะ Active...")
+        # --- [แก้ไข] เปลี่ยนมาใช้ selector ที่ยืดหยุ่นขึ้น โดยหาจากเบอร์ที่ค้นหาและสถานะ ACTIVE ---
+        service_selector = f'div:has-text("{search_value}"):has-text("ACTIVE")'
         await page.wait_for_selector(service_selector, timeout=20000)
+        # จากนั้นหาปุ่ม(svg) ที่อยู่ใน div นั้นแล้วคลิก
         await page.locator(service_selector).locator('svg.MuiSvgIcon-colorSecondary').first.click()
 
         # STEP 6: ดึงข้อมูล Billing จากหน้าสุดท้าย
@@ -156,7 +159,6 @@ async def search_user_info(ctx, fname, lname, phone):
         if p:
             await p.stop()
         print("Playwright browser and instance closed.")
-
 
 # ====== สร้าง Embed แสดงผล (เวอร์ชันแก้ไข) ======
 def create_embed_result(fname, lname, phone, billing_text):
