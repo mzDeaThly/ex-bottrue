@@ -39,7 +39,7 @@ async def true(ctx, *args):
     result_data = await search_user_info(ctx, fname, lname, phone)
 
     # --- ส่งผลลัพธ์ ---
-    if result_data: # ตรวจสอบว่าการค้นหาได้ผลลัพธ์กลับมา (ไม่ใช่ None)
+    if result_data: 
         embed = create_embed_result(fname, lname, phone, result_data)
         try:
             await ctx.author.send(embed=embed)
@@ -73,7 +73,7 @@ async def clear_error(ctx, error):
     await ctx.message.delete()
 
 
-# ====== [แก้ไข] ค้นหาข้อมูลลูกค้า (ดึงข้อมูล 2 Profiles) ======
+# ====== [แก้ไข] ค้นหาข้อมูลลูกค้า (ปรับปรุง Logic การคลิก) ======
 async def search_user_info(ctx, fname, lname, phone):
     p = None
     browser = None
@@ -99,7 +99,7 @@ async def search_user_info(ctx, fname, lname, phone):
             await ctx.send("ภาพหน้าจอของหน้าที่เกิดปัญหา:", file=discord.File("login_error.png"))
             return None
 
-        # STEP 2-5: ขั้นตอนการค้นหาและคลิกเลือก (เหมือนเดิม)
+        # STEP 2: ไปยังหน้าค้นหาและกรอกข้อมูล
         await ctx.send("`[3/7]` กำลังไปยังหน้าค้นหา...")
         await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
         try:
@@ -111,36 +111,36 @@ async def search_user_info(ctx, fname, lname, phone):
         await page.fill("#SearchInput", search_value)
         await page.press("#SearchInput", 'Enter')
         
-        await ctx.send(f"`[5/7]` กำลังเลือกผู้ใช้...")
-        await page.locator(f'div:has-text("{search_value}")').filter(has_text="คุณลูกค้า").first.click()
+        # STEP 3: [ใหม่] คลิกที่การ์ดโปรไฟล์ลูกค้า
+        await ctx.send(f"`[5/7]` กำลังเลือกโปรไฟล์ลูกค้า...")
+        # มองหาปุ่ม MuiCardActionArea-root ที่มีชื่อลูกค้าอยู่ข้างใน
+        customer_card_selector = f'button.MuiCardActionArea-root:has-text("{search_value}")'
+        await page.wait_for_selector(customer_card_selector, timeout=20000)
+        await page.locator(customer_card_selector).first.click()
         
-        await ctx.send("`[6/7]` กำลังเลือกบริการที่สถานะ Active...")
-        service_selector = f'div:has-text("{search_value}"):has-text("ACTIVE")'
-        await page.wait_for_selector(service_selector, timeout=20000)
-        await page.locator(service_selector).locator('svg.MuiSvgIcon-colorSecondary').first.click()
+        # STEP 4: [ใหม่] คลิกที่บริการ TrueOnline
+        await ctx.send("`[6/7]` กำลังเลือกบริการ TrueOnline...")
+        # มองหา div ที่มีคำว่า TrueOnline จากนั้นหาปุ่มลูกศรที่อยู่ใน div นั้น
+        service_container_selector = 'div:has-text("TrueOnline")'
+        await page.wait_for_selector(service_container_selector, timeout=20000)
+        await page.locator(service_container_selector).locator("button.MuiCardActionArea-root").first.click()
 
-        # STEP 7: [แก้ไข] ดึงข้อมูล Subscriber และ Billing (ถ้ามี)
+        # STEP 5: ดึงข้อมูล Subscriber และ Billing
         await ctx.send("`[7/7]` กำลังดึงข้อมูลโปรไฟล์...")
         
-        # --- ดึง Subscriber Profile ---
         subscriber_text = "ไม่พบข้อมูล Subscriber Profile"
         try:
             subscriber_container = page.locator('div:has-text("Subscriber Profile")').last
             await subscriber_container.wait_for(timeout=5000)
             subscriber_text = await subscriber_container.inner_text()
-        except Exception:
-            await ctx.send("`[!]` ไม่พบส่วนของ Subscriber Profile")
-            pass
+        except Exception: pass
             
-        # --- ดึง Billing Profile ---
-        billing_text = "ไม่พบข้อมูล Billing Profile (อาจเป็นเบอร์ประเภทเติมเงิน)"
+        billing_text = "ไม่พบข้อมูล Billing Profile"
         try:
             billing_container = page.locator('div:has-text("Billing Profile")').last
             await billing_container.wait_for(timeout=5000)
             billing_text = await billing_container.inner_text()
-        except Exception:
-            await ctx.send("`[!]` ไม่พบส่วนของ Billing Profile")
-            pass
+        except Exception: pass
             
         return {'subscriber': subscriber_text, 'billing': billing_text}
 
@@ -162,7 +162,7 @@ async def search_user_info(ctx, fname, lname, phone):
             await p.stop()
         print("Playwright browser and instance closed.")
 
-# ====== [แก้ไข] สร้าง Embed แสดงผล (รองรับข้อมูลแบบ Dictionary) ======
+# ====== สร้าง Embed แสดงผล (คงเดิม) ======
 def create_embed_result(fname, lname, phone, result_data: dict):
     embed = discord.Embed(title="📄 ข้อมูลลูกค้า", description="ผลการค้นหาจากระบบ", color=0x00b0f4)
     embed.set_footer(text=f"ค้นหาเมื่อ: {discord.utils.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
@@ -170,15 +170,11 @@ def create_embed_result(fname, lname, phone, result_data: dict):
     search_query = phone if phone else f"{fname} {lname}"
     embed.add_field(name="ข้อมูลที่ใช้ค้นหา", value=search_query, inline=False)
     
-    # --- แสดง Subscriber Profile ---
     subscriber_info = result_data.get('subscriber', 'ไม่พบข้อมูล')
-    # ตัดคำว่า "Subscriber Profile" ด้านบนสุดออกเพื่อความสวยงาม
     subscriber_info = subscriber_info.replace("Subscriber Profile", "").strip()
     embed.add_field(name="👤 Subscriber Profile", value=f"```\n{subscriber_info}\n```", inline=False)
     
-    # --- แสดง Billing Profile ---
     billing_info = result_data.get('billing', 'ไม่พบข้อมูล')
-    # ตัดคำว่า "Billing Profile" ด้านบนสุดออกเพื่อความสวยงาม
     billing_info = billing_info.replace("Billing Profile", "").strip()
     embed.add_field(name="💳 Billing Profile", value=f"```\n{billing_info}\n```", inline=False)
 
