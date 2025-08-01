@@ -75,63 +75,60 @@ async def clear_error(ctx, error):
         await ctx.message.delete()
 # ++++++++++++++++++++++++++++++++++++++ #
 
-# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันสมบูรณ์) ======
+# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันสุดท้าย) ======
 async def search_user_info(ctx, fname, lname, phone):
     page = None
     browser = None
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'])
-            page = await browser.new_page()
+        # async with async_playwright() as p: # Comment this line out if playwright is managed outside
+        p = await async_playwright().start() # Use this line if playwright is managed outside
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
             
-            # STEP 1: Login
-            await page.goto("https://wzzo.truecorp.co.th/auth/realms/Dealer-Internet/protocol/openid-connect/auth?client_id=crmlite-prod-dealer&response_type=code&scope=openid%20profile&redirect_uri=https://crmlite-dealer.truecorp.co.th/&state=xyz&nonce=abc&response_mode=query&code_challenge_method=S256&code_challenge=AzRSFK3CdlHMiDq1DsuRGEY-p6EzTxexaIRyLphE9o4", timeout=60000)
-            await page.fill('input[name="username"]', DEALER_USERNAME)
-            await page.fill('input[name="password"]', DEALER_PASSWORD)
-            await page.click('input[type="submit"]')
+        # STEP 1: Login
+        await page.goto("https://wzzo.truecorp.co.th/auth/realms/Dealer-Internet/protocol/openid-connect/auth?client_id=crmlite-prod-dealer&response_type=code&scope=openid%20profile&redirect_uri=https://crmlite-dealer.truecorp.co.th/&state=xyz&nonce=abc&response_mode=query&code_challenge_method=S256&code_challenge=AzRSFK3CdlHMiDq1DsuRGEY-p6EzTxexaIRyLphE9o4", timeout=60000)
+        await page.fill('input[name="username"]', DEALER_USERNAME)
+        await page.fill('input[name="password"]', DEALER_PASSWORD)
+        await page.click('input[type="submit"]')
 
-            # STEP 2: Smart Search
-            await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
+        # STEP 2: Smart Search
+        await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
             
-            # จัดการ Pop-up (ถ้ามี)
-            try:
-                await page.locator('button:has-text("OK")').click(timeout=5000)
-            except Exception:
-                pass # ถ้าไม่เจอ Pop-up ก็ไม่เป็นไร
+        # จัดการ Pop-up (ถ้ามี)
+        try:
+            await page.locator('button:has-text("OK")').click(timeout=5000)
+        except Exception:
+            pass # ถ้าไม่เจอ Pop-up ก็ไม่เป็นไร
 
-            # รอ, กรอกข้อมูล, และกด Enter
-            search_box_selector = "#SearchInput"
-            await page.wait_for_selector(search_box_selector, timeout=60000)
+        # รอ, กรอกข้อมูล, และกด Enter
+        search_box_selector = "#SearchInput"
+        await page.wait_for_selector(search_box_selector, timeout=60000)
             
-            search_value = phone if phone else f"{fname} {lname}"
-            await page.fill(search_box_selector, search_value)
-            await page.press(search_box_selector, 'Enter')
+        search_value = phone if phone else f"{fname} {lname}"
+        await page.fill(search_box_selector, search_value)
+        
+        # --- [การแก้ไข] ---
+        # กด Enter แทนการคลิกปุ่ม
+        await page.press(search_box_selector, 'Enter')
+        
+        # รอผลลัพธ์และดึงข้อมูล
+        await page.wait_for_url("**/LandingPage", timeout=30000)
+        await page.goto("https://crmlite-dealer.truecorp.co.th/AssetProfilePage")
             
-            # --- [การแก้ไข] ---
-            # 1. รอให้รายการผลลัพธ์ปรากฏขึ้น
-            result_list_selector = "div[role='button']" # รอ div ที่สามารถคลิกได้ (ซึ่งก็คือรายการผลลัพธ์)
-            await page.wait_for_selector(result_list_selector, timeout=30000)
-
-            # 2. คลิกที่ผลลัพธ์รายการแรก
-            await page.locator(result_list_selector).first.click()
-            
-            # 3. รอให้ไปถึงหน้าโปรไฟล์จริงๆ แล้วจึงเริ่มดึงข้อมูล
-            await page.wait_for_url("**/AssetProfilePage", timeout=30000)
-            
-            await page.wait_for_selector("div.asset-info", timeout=10000)
-            billing_info = await page.inner_text("div.asset-info")
-            await browser.close()
-            return billing_info
+        await page.wait_for_selector("div.asset-info", timeout=10000) # เพิ่มการรอข้อมูล
+        billing_info = await page.inner_text("div.asset-info")
+        await browser.close()
+        await p.stop() # Use this line if playwright is managed outside
+        return billing_info
 
     except Exception as e:
-        error_message = f"เกิดข้อผิดพลาด: {e}"
-        print(error_message)
-        # ส่งภาพหน้าจอเมื่อเกิด Error ใดๆ ในกระบวนการนี้
+        await ctx.send(f"‼️ **เกิดปัญหาขึ้น:**\n```\n{e}\n```")
         if page:
             await page.screenshot(path="final_error.png", full_page=True)
-            await ctx.send(f"‼️ **เกิดปัญหาขึ้น:**\n```\n{e}\n```", file=discord.File("final_error.png"))
+            await ctx.send("ภาพหน้าจอของหน้าที่เกิดปัญหาล่าสุด:", file=discord.File("final_error.png"))
         if browser:
             await browser.close()
+        # await p.stop() # Use this line if playwright is managed outside
         raise e
 
 # ====== สร้าง Embed แสดงผล (เวอร์ชันแก้ไข) ======
