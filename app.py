@@ -79,7 +79,7 @@ async def clear_error(ctx, error):
 
 # =========== สิ้นสุดคำสั่ง !Clear ==========!
 
-# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันแก้ไขให้ยืดหยุ่นกับประเภทบริการ) ======
+# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันสมบูรณ์ รองรับเบอร์เติมเงิน) ======
 async def search_user_info(ctx, fname, lname, phone):
     p = None
     browser = None
@@ -90,16 +90,16 @@ async def search_user_info(ctx, fname, lname, phone):
         page = await browser.new_page()
         
         # STEP 1: Login
-        await ctx.send("`[2/8]` กำลังเข้าสู่ระบบ...")
+        await ctx.send("`[1/7]` กำลังเข้าสู่ระบบ...")
         await page.goto("https://wzzo.truecorp.co.th/auth/realms/Dealer-Internet/protocol/openid-connect/auth?client_id=crmlite-prod-dealer&response_type=code&scope=openid%20profile&redirect_uri=https://crmlite-dealer.truecorp.co.th/&state=xyz&nonce=abc&response_mode=query&code_challenge_method=S256&code_challenge=AzRSFK3CdlHMiDq1DsuRGEY-p6EzTxexaIRyLphE9o4", timeout=60000)
         await page.fill('input[name="username"]', DEALER_USERNAME)
         await page.fill('input[name="password"]', DEALER_PASSWORD)
         await page.click('input[type="submit"]')
         await page.wait_for_load_state('domcontentloaded', timeout=30000)
-        await ctx.send("`[+]` เข้าสู่ระบบสำเร็จ!")
+        await ctx.send("`[2/7]` เข้าสู่ระบบสำเร็จ!")
 
         # STEP 2: Smart Search
-        await ctx.send("`[3/8]` กำลังไปยังหน้าค้นหา...")
+        await ctx.send("`[3/7]` กำลังไปยังหน้าค้นหา...")
         await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
         
         try:
@@ -109,38 +109,45 @@ async def search_user_info(ctx, fname, lname, phone):
 
         # STEP 3: กรอกข้อมูลและค้นหา
         search_value = phone if phone else f"{fname} {lname}"
-        await ctx.send(f"`[4/8]` กำลังค้นหาข้อมูล '{search_value}'...")
+        await ctx.send(f"`[4/7]` กำลังค้นหา '{search_value}'...")
         search_box_selector = "#SearchInput"
         await page.wait_for_selector(search_box_selector, timeout=60000)
         
         await page.fill(search_box_selector, search_value)
         await page.press(search_box_selector, 'Enter')
 
-        # STEP 4: รอและเลือกผู้ใช้งานที่ Active
-        await ctx.send(f"`[5/8]` กำลังค้นหาผู้ใช้ '{search_value}'...")
-        # เราจะหา div ที่มีชื่อลูกค้าที่เราค้นหา แล้วคลิกที่ div นั้น
+        # STEP 4: เลือกผู้ใช้งาน
+        await ctx.send(f"`[5/7]` กำลังเลือกผู้ใช้...")
         user_selector = f'div:has-text("{search_value}")'
         await page.wait_for_selector(user_selector, timeout=20000)
-        # คลิกที่ผลการค้นหา 'คุณลูกค้า'
         await page.locator(user_selector).filter(has_text="คุณลูกค้า").first.click()
 
-
-        # STEP 5: รอและเลือกบริการที่ Active (ไม่ว่าจะเป็น TrueOnline หรือ TrueMove H)
-        await ctx.send("`[6/8]` พบผู้ใช้! กำลังเลือกบริการที่สถานะ Active...")
-        # --- [แก้ไข] เปลี่ยนมาใช้ selector ที่ยืดหยุ่นขึ้น โดยหาจากเบอร์ที่ค้นหาและสถานะ ACTIVE ---
+        # STEP 5: เลือกบริการที่ Active
+        await ctx.send("`[6/7]` กำลังเลือกบริการที่สถานะ Active...")
         service_selector = f'div:has-text("{search_value}"):has-text("ACTIVE")'
         await page.wait_for_selector(service_selector, timeout=20000)
-        # จากนั้นหาปุ่ม(svg) ที่อยู่ใน div นั้นแล้วคลิก
         await page.locator(service_selector).locator('svg.MuiSvgIcon-colorSecondary').first.click()
 
-        # STEP 6: ดึงข้อมูล Billing จากหน้าสุดท้าย
-        await ctx.send("`[7/8]` พบเซอร์วิส! กำลังดึงข้อมูล Billing...")
-        billing_info_container_selector = 'div.MuiGrid-container:has(p:text("Billing Name:"))'
-        await page.wait_for_selector(billing_info_container_selector, timeout=10000)
+        # STEP 6: ดึงข้อมูล Billing (ถ้ามี)
+        await ctx.send("`[7/7]` กำลังตรวจสอบข้อมูล Billing...")
         
-        billing_container = page.locator(billing_info_container_selector).last
-        billing_info = await billing_container.inner_text()
-        
+        # กำหนดค่าเริ่มต้นไว้ ในกรณีที่ไม่เจอข้อมูล
+        billing_info = "ไม่พบข้อมูล Billing Address (อาจเป็นเบอร์ประเภทเติมเงิน)"
+        try:
+            # พยายามรอ container ของ Billing แค่ 5 วินาที
+            billing_info_container_selector = 'div.MuiGrid-container:has(p:text("Billing Name:"))'
+            await page.wait_for_selector(billing_info_container_selector, timeout=5000) # ลดเวลาลง
+            
+            # ถ้าเจอ ก็ดึงข้อมูลออกมา
+            billing_container = page.locator(billing_info_container_selector).last
+            billing_info = await billing_container.inner_text()
+            
+        except Exception:
+            # ถ้าไม่เจอ (เกิด Timeout) ก็ไม่เป็นไร ให้ข้ามไป
+            # บอทจะใช้ข้อความที่กำหนดไว้ด้านบนแทน
+            await ctx.send("`[!]` ไม่พบข้อมูล Billing/ที่อยู่ จึงแสดงข้อมูลเท่าที่มี")
+            pass
+
         return billing_info
 
     except Exception as e:
