@@ -25,43 +25,39 @@ async def on_ready():
 
 @bot.command()
 async def true(ctx, *args):
-    await ctx.send("`[1/8]` ได้รับคำสั่ง! กำลังเริ่มต้น...")
-    try:
-        if len(args) == 1:
-            phone = args[0]
-            fname, lname = "", ""
-        elif len(args) == 2:
-            fname, lname = args
-            phone = ""
-        else:
-            await ctx.send("❌ รูปแบบคำสั่งไม่ถูกต้อง\nพิมพ์แค่: `!true <เบอร์โทร>` หรือ `!true <ชื่อ> <นามสกุล>`")
-            return
+    # --- ตรวจสอบ Input ---
+    phone, fname, lname = "", "", ""
+    if len(args) == 1:
+        phone = args[0]
+    elif len(args) == 2:
+        fname, lname = args
+    else:
+        await ctx.send("❌ รูปแบบคำสั่งไม่ถูกต้อง\nพิมพ์แค่: `!true <เบอร์โทร>` หรือ `!true <ชื่อ> <นามสกุล>`")
+        return
 
-        result = await search_user_info(ctx, fname, lname, phone)
-        embed = create_embed_result(fname, lname, phone, result)
-        await ctx.author.send(embed=embed)
-        await ctx.send("`[8/8]` ✅ ส่งข้อมูลไปที่ DM เรียบร้อย!")
+    # --- เรียกใช้ฟังก์ชันค้นหา ---
+    result_data = await search_user_info(ctx, fname, lname, phone)
 
-    except Exception as e:
-        print(f"Error reached main handler: {e}")
-# =========== สิ้นสุดการทำงานหลักของบอท ============= #
+    # --- ส่งผลลัพธ์ ---
+    if result_data: # ตรวจสอบว่าการค้นหาได้ผลลัพธ์กลับมา (ไม่ใช่ None)
+        embed = create_embed_result(fname, lname, phone, result_data)
+        try:
+            await ctx.author.send(embed=embed)
+            await ctx.send("`[8/8]` ✅ ส่งข้อมูลไปที่ DM เรียบร้อย!")
+        except discord.Forbidden:
+            await ctx.send("❌ ไม่สามารถส่ง DM หากรุณาตรวจสอบว่าคุณได้เปิดรับข้อความจากสมาชิกเซิร์ฟเวอร์นี้หรือไม่")
 
-# =========== คำสั่ง !clear ===============#
-
+# =========== คำสั่ง !clear (คงเดิม) ===============#
 @bot.command()
 @commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int = 5):
     """ลบข้อความในช่องตามจำนวนที่ระบุ (ค่าเริ่มต้น 5)"""
-    
-    # ตรวจสอบว่าใช้ในช่อง "สอบถาม" เท่านั้น
     if ctx.channel.name != "สอบถาม":
         await ctx.send("❌ คำสั่งนี้ใช้ได้เฉพาะในช่อง #สอบถาม เท่านั้น", delete_after=10)
-        # ลบข้อความคำสั่ง !clear ที่ผู้ใช้พิมพ์ผิดช่อง
         await asyncio.sleep(1)
         await ctx.message.delete()
         return
 
-    # ลบข้อความ (จำนวนที่ต้องการ + ข้อความคำสั่ง !clear)
     deleted = await ctx.channel.purge(limit=amount + 1)
     await ctx.send(f"✅ ลบไป {len(deleted) - 1} ข้อความเรียบร้อยแล้ว", delete_after=5)
 
@@ -70,16 +66,14 @@ async def clear_error(ctx, error):
     """จัดการ Error สำหรับคำสั่ง clear"""
     if isinstance(error, commands.MissingPermissions):
         await ctx.send("🚫 คุณไม่มีสิทธิ์ในการลบข้อความ", delete_after=10)
-        await asyncio.sleep(1)
-        await ctx.message.delete()
     elif isinstance(error, commands.BadArgument):
         await ctx.send("❌ โปรดระบุจำนวนเป็นตัวเลข เช่น `!clear 10`", delete_after=10)
-        await asyncio.sleep(1)
-        await ctx.message.delete()
+    
+    await asyncio.sleep(1)
+    await ctx.message.delete()
 
-# =========== สิ้นสุดคำสั่ง !Clear ==========!
 
-# ====== ค้นหาข้อมูลลูกค้า (เวอร์ชันสมบูรณ์ รองรับเบอร์เติมเงิน) ======
+# ====== [แก้ไข] ค้นหาข้อมูลลูกค้า (ดึงข้อมูล 2 Profiles) ======
 async def search_user_info(ctx, fname, lname, phone):
     p = None
     browser = None
@@ -88,73 +82,74 @@ async def search_user_info(ctx, fname, lname, phone):
         p = await async_playwright().start()
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
-        
-        # STEP 1: Login
+
+        # STEP 1: Login และตรวจสอบผลลัพธ์
         await ctx.send("`[1/7]` กำลังเข้าสู่ระบบ...")
         await page.goto("https://wzzo.truecorp.co.th/auth/realms/Dealer-Internet/protocol/openid-connect/auth?client_id=crmlite-prod-dealer&response_type=code&scope=openid%20profile&redirect_uri=https://crmlite-dealer.truecorp.co.th/&state=xyz&nonce=abc&response_mode=query&code_challenge_method=S256&code_challenge=AzRSFK3CdlHMiDq1DsuRGEY-p6EzTxexaIRyLphE9o4", timeout=60000)
         await page.fill('input[name="username"]', DEALER_USERNAME)
         await page.fill('input[name="password"]', DEALER_PASSWORD)
         await page.click('input[type="submit"]')
-        await page.wait_for_load_state('domcontentloaded', timeout=30000)
-        await ctx.send("`[2/7]` เข้าสู่ระบบสำเร็จ!")
-
-        # STEP 2: Smart Search
-        await ctx.send("`[3/7]` กำลังไปยังหน้าค้นหา...")
-        await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
         
         try:
-            await page.locator('button:has-text("OK")').click(timeout=5000)
+            await page.wait_for_url(lambda url: "/auth/" not in url, timeout=15000)
+            await ctx.send("`[2/7]` เข้าสู่ระบบสำเร็จ!")
         except Exception:
-            pass 
+            await ctx.send("‼️ **Login ไม่สำเร็จ!**\nกรุณาตรวจสอบ `DEALER_USERNAME` และ `DEALER_PASSWORD` ในไฟล์ `.env` ของคุณอีกครั้ง")
+            await page.screenshot(path="login_error.png", full_page=True)
+            await ctx.send("ภาพหน้าจอของหน้าที่เกิดปัญหา:", file=discord.File("login_error.png"))
+            return None
 
-        # STEP 3: กรอกข้อมูลและค้นหา
+        # STEP 2-5: ขั้นตอนการค้นหาและคลิกเลือก (เหมือนเดิม)
+        await ctx.send("`[3/7]` กำลังไปยังหน้าค้นหา...")
+        await page.goto("https://crmlite-dealer.truecorp.co.th/SmartSearchPage", timeout=60000)
+        try:
+            await page.locator('button:has-text("OK")').click(timeout=5000)
+        except Exception: pass
+        
         search_value = phone if phone else f"{fname} {lname}"
         await ctx.send(f"`[4/7]` กำลังค้นหา '{search_value}'...")
-        search_box_selector = "#SearchInput"
-        await page.wait_for_selector(search_box_selector, timeout=60000)
+        await page.fill("#SearchInput", search_value)
+        await page.press("#SearchInput", 'Enter')
         
-        await page.fill(search_box_selector, search_value)
-        await page.press(search_box_selector, 'Enter')
-
-        # STEP 4: เลือกผู้ใช้งาน
         await ctx.send(f"`[5/7]` กำลังเลือกผู้ใช้...")
-        user_selector = f'div:has-text("{search_value}")'
-        await page.wait_for_selector(user_selector, timeout=20000)
-        await page.locator(user_selector).filter(has_text="คุณลูกค้า").first.click()
-
-        # STEP 5: เลือกบริการที่ Active
+        await page.locator(f'div:has-text("{search_value}")').filter(has_text="คุณลูกค้า").first.click()
+        
         await ctx.send("`[6/7]` กำลังเลือกบริการที่สถานะ Active...")
         service_selector = f'div:has-text("{search_value}"):has-text("ACTIVE")'
         await page.wait_for_selector(service_selector, timeout=20000)
         await page.locator(service_selector).locator('svg.MuiSvgIcon-colorSecondary').first.click()
 
-        # STEP 6: ดึงข้อมูล Billing (ถ้ามี)
-        await ctx.send("`[7/7]` กำลังตรวจสอบข้อมูล Billing...")
+        # STEP 7: [แก้ไข] ดึงข้อมูล Subscriber และ Billing (ถ้ามี)
+        await ctx.send("`[7/7]` กำลังดึงข้อมูลโปรไฟล์...")
         
-        # กำหนดค่าเริ่มต้นไว้ ในกรณีที่ไม่เจอข้อมูล
-        billing_info = "ไม่พบข้อมูล Billing Address (อาจเป็นเบอร์ประเภทเติมเงิน)"
+        # --- ดึง Subscriber Profile ---
+        subscriber_text = "ไม่พบข้อมูล Subscriber Profile"
         try:
-            # พยายามรอ container ของ Billing แค่ 5 วินาที
-            billing_info_container_selector = 'div.MuiGrid-container:has(p:text("Billing Name:"))'
-            await page.wait_for_selector(billing_info_container_selector, timeout=5000) # ลดเวลาลง
-            
-            # ถ้าเจอ ก็ดึงข้อมูลออกมา
-            billing_container = page.locator(billing_info_container_selector).last
-            billing_info = await billing_container.inner_text()
-            
+            subscriber_container = page.locator('div:has-text("Subscriber Profile")').last
+            await subscriber_container.wait_for(timeout=5000)
+            subscriber_text = await subscriber_container.inner_text()
         except Exception:
-            # ถ้าไม่เจอ (เกิด Timeout) ก็ไม่เป็นไร ให้ข้ามไป
-            # บอทจะใช้ข้อความที่กำหนดไว้ด้านบนแทน
-            await ctx.send("`[!]` ไม่พบข้อมูล Billing/ที่อยู่ จึงแสดงข้อมูลเท่าที่มี")
+            await ctx.send("`[!]` ไม่พบส่วนของ Subscriber Profile")
             pass
-
-        return billing_info
+            
+        # --- ดึง Billing Profile ---
+        billing_text = "ไม่พบข้อมูล Billing Profile (อาจเป็นเบอร์ประเภทเติมเงิน)"
+        try:
+            billing_container = page.locator('div:has-text("Billing Profile")').last
+            await billing_container.wait_for(timeout=5000)
+            billing_text = await billing_container.inner_text()
+        except Exception:
+            await ctx.send("`[!]` ไม่พบส่วนของ Billing Profile")
+            pass
+            
+        return {'subscriber': subscriber_text, 'billing': billing_text}
 
     except Exception as e:
         error_message = f"‼️ **เกิดปัญหาขึ้นระหว่างการทำงาน:**\n```\n{type(e).__name__}: {e}\n```"
         print(error_message) 
-        await ctx.send(error_message)
-        if page:
+        if "Target closed" not in str(e):
+             await ctx.send(error_message)
+        if page and not page.is_closed():
             screenshot_path = "error_screenshot.png"
             await page.screenshot(path=screenshot_path, full_page=True)
             await ctx.send("ภาพหน้าจอของหน้าที่เกิดปัญหาล่าสุด:", file=discord.File(screenshot_path))
@@ -167,37 +162,33 @@ async def search_user_info(ctx, fname, lname, phone):
             await p.stop()
         print("Playwright browser and instance closed.")
 
-# ====== สร้าง Embed แสดงผล (เวอร์ชันแก้ไข) ======
-def create_embed_result(fname, lname, phone, billing_text):
-    embed = discord.Embed(title="📄 ข้อมูลลูกค้า", description="ผลการค้นหา", color=0x00b0f4)
+# ====== [แก้ไข] สร้าง Embed แสดงผล (รองรับข้อมูลแบบ Dictionary) ======
+def create_embed_result(fname, lname, phone, result_data: dict):
+    embed = discord.Embed(title="📄 ข้อมูลลูกค้า", description="ผลการค้นหาจากระบบ", color=0x00b0f4)
+    embed.set_footer(text=f"ค้นหาเมื่อ: {discord.utils.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
 
-    if fname and lname:
-        embed.add_field(name="ค้นหาด้วย", value=f"{fname} {lname}", inline=False)
-    if phone:
-        embed.add_field(name="เบอร์โทร", value=phone, inline=False)
-
-    if not billing_text or not billing_text.strip():
-        embed.add_field(name="ผลลัพธ์", value="❌ ไม่พบข้อมูลในระบบ", inline=False)
-        return embed
-
-    found_specific_fields = False
-    lines = billing_text.split("\n")
-    for line in lines:
-        if "เลขประจำตัว" in line:
-            embed.add_field(name="เลขประจำตัว", value=line.strip(), inline=False)
-            found_specific_fields = True
-        elif "ที่อยู่" in line:
-            embed.add_field(name="ที่อยู่", value=line.strip(), inline=False)
-            found_specific_fields = True
-            
-    if not found_specific_fields:
-        embed.add_field(name="ข้อมูลที่พบ", value=f"```\n{billing_text}\n```", inline=False)
+    search_query = phone if phone else f"{fname} {lname}"
+    embed.add_field(name="ข้อมูลที่ใช้ค้นหา", value=search_query, inline=False)
+    
+    # --- แสดง Subscriber Profile ---
+    subscriber_info = result_data.get('subscriber', 'ไม่พบข้อมูล')
+    # ตัดคำว่า "Subscriber Profile" ด้านบนสุดออกเพื่อความสวยงาม
+    subscriber_info = subscriber_info.replace("Subscriber Profile", "").strip()
+    embed.add_field(name="👤 Subscriber Profile", value=f"```\n{subscriber_info}\n```", inline=False)
+    
+    # --- แสดง Billing Profile ---
+    billing_info = result_data.get('billing', 'ไม่พบข้อมูล')
+    # ตัดคำว่า "Billing Profile" ด้านบนสุดออกเพื่อความสวยงาม
+    billing_info = billing_info.replace("Billing Profile", "").strip()
+    embed.add_field(name="💳 Billing Profile", value=f"```\n{billing_info}\n```", inline=False)
 
     return embed
 
 # ====== เริ่มทำงาน ======
 if not DISCORD_TOKEN:
-    print("❌ ไม่พบ DISCORD_TOKEN")
+    print("❌ ไม่พบ DISCORD_TOKEN ใน .env ไฟล์")
+elif not DEALER_USERNAME or not DEALER_PASSWORD:
+    print("❌ ไม่พบ DEALER_USERNAME หรือ DEALER_PASSWORD ใน .env ไฟล์")
 else:
     print("📡 กำลังเริ่มบอท...")
     bot.run(DISCORD_TOKEN)
